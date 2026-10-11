@@ -1,0 +1,42 @@
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Pass the Authorization header through to PHP (needed on CGI/FastCGI hosts).
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # HTTPS everywhere (except certificate validation).
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteCond %{REQUEST_URI} !^/\.well-known/(acme-challenge|pki-validation|cpanel-dcv)/
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # Never serve internals, config or dotfiles.
+    RewriteRule ^(src|cron|data|tests)(/|$) - [F,L]
+    RewriteRule ^config(\.example)?\.php$ - [F,L]
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # OAuth discovery + endpoints
+    RewriteRule ^\.well-known/oauth-protected-resource(/.*)?$ oauth.php?r=resource-metadata [L,QSA]
+    RewriteRule ^\.well-known/oauth-authorization-server(/.*)?$ oauth.php?r=server-metadata [L,QSA]
+    RewriteRule ^\.well-known/openid-configuration$ oauth.php?r=server-metadata [L,QSA]
+    RewriteRule ^oauth/(register|authorize|token)$ oauth.php?r=$1 [L,QSA]
+
+    # MCP endpoint
+    RewriteRule ^mcp/?$ mcp.php [L,QSA]
+
+    # Web UI JSON API
+    RewriteRule ^api/(.*)$ api.php?route=$1 [L,QSA]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>

@@ -1,0 +1,50 @@
+name: Deploy to cPanel (FTP)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Lint PHP
+        run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Smoke tests
+        run: php tests/run.php
+
+      - name: FTP secrets missing
+        if: ${{ env.FTP_SERVER == '' }}
+        run: echo "::warning::Add FTP_SERVER, FTP_USERNAME and FTP_PASSWORD repository secrets to enable deploys."
+
+      - name: Upload changed files
+        if: ${{ env.FTP_SERVER != '' }}
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Folder of the subdomain, relative to the FTP account's root, ending in "/".
+          # Leave the secret unset if the FTP account already opens in the site folder.
+          server-dir: ${{ secrets.FTP_SERVER_DIR || './' }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          # Shared hosts often present the server's generic certificate; still encrypted.
+          security: loose
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            tests/**
+            config.php
+            data/**
+            README.md
